@@ -1,5 +1,7 @@
+import 'package:firebase_auth_demo/forgot_password_screen.dart';
 import 'package:firebase_auth_demo/home_screen.dart';
 import 'package:firebase_auth_demo/login_screen.dart';
+import 'package:firebase_auth_demo/otp_screen.dart';
 import 'package:firebase_auth_demo/signup_screen.dart';
 import 'package:firebase_auth_demo/wrapper_screen.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -23,9 +25,11 @@ class MyApp extends StatelessWidget {
       initialRoute: '/',
       routes: {
         '/': (_) => const WrapperScreen(),
-        '/home': (_) => const HomeScreen(),
+        '/home': (_) => HomeScreen(),
         '/login': (_) => const LoginScreen(),
         '/signup': (_) => const SignUpScreen(),
+        '/forgot': (_) => const ForgotPasswordScreen(),
+        '/otp': (_) => const OtpScreen(),
       },
     );
   }

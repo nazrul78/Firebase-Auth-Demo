@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
@@ -29,6 +30,16 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
         await credential.user!.updateDisplayName(_nameController.text.trim());
         await credential.user!.reload();
+
+        // 👇 Add user data to Firestore
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(credential.user!.uid)
+            .set({
+          'uid': credential.user!.uid,
+          'name': _nameController.text.trim(),
+          'email': _emailController.text.trim(),
+        });
 
         Navigator.pushNamed(context, '/home');
       } on FirebaseAuthException catch (e) {

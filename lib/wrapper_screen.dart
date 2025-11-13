@@ -13,14 +13,16 @@ class WrapperScreen extends StatefulWidget {
 class _WrapperScreenState extends State<WrapperScreen> {
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder(
+    return StreamBuilder<User?>(
       stream: FirebaseAuth.instance.authStateChanges(),
       builder: (context, snapshot) {
-        if (snapshot.hasData) {
-          return HomeScreen();
-        } else {
-          return LoginScreen();
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return CircularProgressIndicator(); // Loading
         }
+        if (snapshot.hasData) {
+          return HomeScreen(); // User is logged in
+        }
+        return LoginScreen(); // User is not logged in
       },
     );
   }

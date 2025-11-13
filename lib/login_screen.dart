@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_signin_button/flutter_signin_button.dart';
@@ -13,71 +14,111 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _phoneController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
-  bool _isLoading = false;
-  final GoogleSignIn _googleSignIn = GoogleSignIn();
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  final GoogleSignIn _googleSignIn = GoogleSignIn();
 
-  Future<void> _signIn() async {
+  bool _isLoading = false;
+  bool _isPhoneAuth = false;
+  String _countryCode = "+91";
+
+  void toggleAuthMode() {
+    setState(() => _isPhoneAuth = !_isPhoneAuth);
+  }
+
+  Future<void> _signInWithEmail() async {
     if (!_formKey.currentState!.validate()) return;
-
     setState(() => _isLoading = true);
 
     try {
-      await FirebaseAuth.instance.signInWithEmailAndPassword(
+      await _auth.signInWithEmailAndPassword(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
       );
-
       Navigator.pushReplacementNamed(context, "/home");
     } on FirebaseAuthException catch (e) {
-      String message;
-      switch (e.code) {
-        case 'user-not-found':
-          message = 'No user found for that email.';
-          break;
-        case 'wrong-password':
-          message = 'Wrong password provided.';
-          break;
-        case 'invalid-email':
-          message = 'Invalid email format.';
-          break;
-        default:
-          message = 'Login failed. Please try again.';
-      }
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message)),
-      );
-    } catch (_) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Something went wrong. Try again later.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message ?? 'Login failed')));
     } finally {
       setState(() => _isLoading = false);
     }
   }
 
+  Future<void> _signInWithPhone() async {
+    if (_phoneController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Enter valid phone number")));
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    final phone = '$_countryCode${_phoneController.text.trim()}';
+    await _auth.verifyPhoneNumber(
+      phoneNumber: phone,
+      verificationCompleted: (PhoneAuthCredential credential) {},
+      verificationFailed: (FirebaseAuthException e) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.message ?? "Error")));
+        setState(() => _isLoading = false);
+      },
+      codeSent: (String verificationId, int? resendToken) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text("OTP sent to $phone")));
+        setState(() => _isLoading = false);
+        Navigator.pushNamed(
+          context,
+          '/otp',
+          arguments: {'verificationId': verificationId},
+        );
+      },
+      codeAutoRetrievalTimeout: (String verificationId) {
+        setState(() => _isLoading = false);
+      },
+    );
+  }
+
   Future<UserCredential?> signInWithGoogle() async {
     try {
-      // Trigger the Google authentication flow
-      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
-      if (googleUser == null) return null; // user canceled
+      final googleUser = await _googleSignIn.signIn();
+      if (googleUser == null) return null;
 
-      // Obtain the auth details
-      final GoogleSignInAuthentication googleAuth =
-          await googleUser.authentication;
-
-      // Create a new credential
+      final googleAuth = await googleUser.authentication;
       final credential = GoogleAuthProvider.credential(
         accessToken: googleAuth.accessToken,
         idToken: googleAuth.idToken,
       );
 
-      // Sign in to Firebase with the Google credential
-      return await _auth.signInWithCredential(credential);
+      final userCredential = await _auth.signInWithCredential(credential);
+      final user = userCredential.user;
+
+      if (user != null) {
+        final userRef = FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid);
+        final userDoc = await userRef.get();
+
+        if (!userDoc.exists) {
+          await userRef.set({
+            'uid': user.uid,
+            'name': user.displayName ?? '',
+            'email': user.email ?? '',
+          });
+        }
+
+        return userCredential;
+      }
+      return null;
     } catch (e) {
       print("Google Sign-In Error: $e");
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Something went wrong. Try again.")),
+      );
       return null;
     }
   }
@@ -86,6 +127,7 @@ class _LoginScreenState extends State<LoginScreen> {
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
+    _phoneController.dispose();
     super.dispose();
   }
 
@@ -96,63 +138,103 @@ class _LoginScreenState extends State<LoginScreen> {
       resizeToAvoidBottomInset: false,
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 50),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 30),
           child: Form(
             key: _formKey,
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 const Text(
                   'Login',
                   style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
-                  textAlign: TextAlign.center,
                 ),
-                const SizedBox(height: 40),
-                TextFormField(
-                  controller: _emailController,
-                  decoration: const InputDecoration(
-                    filled: true, // Enable background fill
-                    fillColor: Colors.white, // Set background color to white
-                    prefixIcon: Icon(Icons.email_outlined),
-                    labelText: 'Email',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.all(Radius.circular(12)),
-                    ),
-                  ),
-                  validator: (value) => value == null || !value.contains('@')
-                      ? 'Enter a valid email'
-                      : null,
-                ),
-
                 const SizedBox(height: 20),
-                TextFormField(
-                  controller: _passwordController,
-                  obscureText: true,
-                  decoration: const InputDecoration(
-                    filled: true, // Enable background fill
-                    fillColor: Colors.white, // Set background color to white
-                    prefixIcon: Icon(Icons.lock_outline),
-                    labelText: 'Password',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.all(Radius.circular(12)),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(_isPhoneAuth ? "Use Email" : "Use Phone"),
+                    Switch(
+                      value: _isPhoneAuth,
+                      onChanged: (_) => toggleAuthMode(),
                     ),
-                  ),
-                  validator: (value) => value != null && value.length < 6
-                      ? 'Password must be at least 6 characters'
-                      : null,
+                  ],
                 ),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton(
-                    onPressed: () {}, // TODO: Add forgot password
-                    child: const Text("Forgot password?"),
+                const SizedBox(height: 20),
+                if (_isPhoneAuth)
+                  Column(
+                    children: [
+                      TextFormField(
+                        controller: _phoneController,
+                        keyboardType: TextInputType.phone,
+                        decoration: InputDecoration(
+                          filled: true,
+                          fillColor: Colors.white,
+                          prefixText: "$_countryCode ",
+                          prefixIcon: const Icon(Icons.phone_android),
+                          labelText: "Phone Number",
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
+                    ],
+                  )
+                else
+                  Column(
+                    children: [
+                      TextFormField(
+                        controller: _emailController,
+                        decoration: InputDecoration(
+                          filled: true,
+                          fillColor: Colors.white,
+                          prefixIcon: const Icon(Icons.email_outlined),
+                          labelText: 'Email',
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        validator: (value) =>
+                            value != null && value.contains('@')
+                            ? null
+                            : 'Enter valid email',
+                      ),
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        controller: _passwordController,
+                        obscureText: true,
+                        decoration: InputDecoration(
+                          filled: true,
+                          fillColor: Colors.white,
+                          prefixIcon: const Icon(Icons.lock_outline),
+                          labelText: 'Password',
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        validator: (value) => value != null && value.length >= 6
+                            ? null
+                            : 'Min 6 characters',
+                      ),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton(
+                          onPressed: () =>
+                              Navigator.pushNamed(context, '/forgot'),
+                          child: const Text("Forgot password?"),
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 20),
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: _isLoading ? null : _signIn,
+                    onPressed: _isLoading
+                        ? null
+                        : () => _isPhoneAuth
+                              ? _signInWithPhone()
+                              : _signInWithEmail(),
                     style: ElevatedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       backgroundColor: Colors.blue,
@@ -165,12 +247,13 @@ class _LoginScreenState extends State<LoginScreen> {
                             width: 24,
                             height: 24,
                             child: CircularProgressIndicator(
-                                color: Colors.white, strokeWidth: 2),
+                              color: Colors.white,
+                              strokeWidth: 2,
+                            ),
                           )
-                        : const Text("Log In"),
+                        : Text(_isPhoneAuth ? "Send OTP" : "Log In"),
                   ),
                 ),
-
                 const SizedBox(height: 20),
                 Row(
                   children: const [
@@ -183,8 +266,6 @@ class _LoginScreenState extends State<LoginScreen> {
                   ],
                 ),
                 const SizedBox(height: 20),
-
-                // Google Sign-In Button (flutter_signin_button)
                 SizedBox(
                   width: double.infinity,
                   height: 50,
@@ -193,42 +274,38 @@ class _LoginScreenState extends State<LoginScreen> {
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    text: "Sign in with Google",
-                    padding: const EdgeInsets.all(8),
                     onPressed: () async {
-                      final userCredential = await signInWithGoogle();
-                      if (userCredential != null) {
+                      setState(() => _isLoading = true);
+
+                      final user = await signInWithGoogle();
+
+                      if (mounted) setState(() => _isLoading = false);
+
+                      if (user != null) {
+                        Navigator.pushReplacementNamed(context, "/home");
+                      } else {
+                        // Optional: show error
                         ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                              content: Text(
-                                  'Signed in as ${userCredential.user?.displayName}')),
+                          SnackBar(content: Text("Google sign-in failed")),
                         );
                       }
-                      // // TODO: Implement actual Google Sign-In logic here
-                      // ScaffoldMessenger.of(context).showSnackBar(
-                      //   const SnackBar(
-                      //       content: Text("Google Sign-In coming soon")),
-                      // );
                     },
                   ),
                 ),
-
-                const SizedBox(height: 30),
+                const SizedBox(height: 20),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     const Text("Don’t have an account? "),
                     GestureDetector(
-                      onTap: () {
-                        Navigator.pushNamed(context, '/signup');
-                      },
+                      onTap: () => Navigator.pushNamed(context, '/signup'),
                       child: const Text(
                         "Sign up",
                         style: TextStyle(color: Colors.blue),
                       ),
                     ),
                   ],
-                )
+                ),
               ],
             ),
           ),
