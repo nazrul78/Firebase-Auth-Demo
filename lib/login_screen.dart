@@ -21,7 +21,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
   bool _isLoading = false;
   bool _isPhoneAuth = false;
-  String _countryCode = "+91";
+  // String _countryCode = "+91";
+  final String _countryCode = "+88";
 
   void toggleAuthMode() {
     setState(() => _isPhoneAuth = !_isPhoneAuth);
