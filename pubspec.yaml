@@ -41,6 +41,7 @@ dependencies:
   google_sign_in: ^6.3.0
   intl_phone_field: ^3.2.0
   cloud_firestore: ^5.6.8
+  another_telephony: ^0.4.1
 
 dev_dependencies:
   flutter_test:

@@ -307,6 +307,20 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ],
                 ),
+                const SizedBox(height: 20),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    // const Text("Don’t have an account? "),
+                    GestureDetector(
+                      onTap: () => Navigator.pushNamed(context, '/autoReadSMS'),
+                      child: const Text(
+                        "Auto Read SMS",
+                        style: TextStyle(color: Colors.blue),
+                      ),
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
